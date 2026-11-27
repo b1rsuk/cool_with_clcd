@@ -51,20 +51,23 @@ jobs:
           docker push ${{ steps.meta.outputs.image }}:${{ github.sha }}
           docker push ${{ steps.meta.outputs.image }}:latest
 
+
   deploy:
     if: github.event_name == 'push'
     needs: build
     runs-on: self-hosted
     environment: production
     steps:
-      - name: Deploy over SSH (with automatic rollback)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script_stop: true
-          script: |
-            cd ~/unit-converter
-            git pull
-            IMAGE=${{ needs.build.outputs.image }} ./scripts/deploy.sh ${{ github.sha }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Deploy application
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
+        run: |
+          chmod +x scripts/deploy.sh
+          ./scripts/deploy.sh ${{ github.sha }}
