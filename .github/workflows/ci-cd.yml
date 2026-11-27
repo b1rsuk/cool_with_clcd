@@ -1,0 +1,70 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Image name (lowercase)
+        id: meta
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Build image
+        run: |
+          docker build --build-arg APP_VERSION=${{ github.sha }} \
+            -t ${{ steps.meta.outputs.image }}:${{ github.sha }} \
+            -t ${{ steps.meta.outputs.image }}:latest .
+      - name: Smoke test (container must become healthy)
+        run: |
+          docker run -d --name smoke -p 3000:3000 ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          for i in $(seq 1 10); do curl -fs localhost:3000/health && exit 0; sleep 2; done
+          docker logs smoke; exit 1
+      - name: Login to GHCR
+        if: github.event_name == 'push'
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Push image
+        if: github.event_name == 'push'
+        run: |
+          docker push ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          docker push ${{ steps.meta.outputs.image }}:latest
+
+  deploy:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH (with automatic rollback)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script_stop: true
+          script: |
+            cd ~/unit-converter
+            git pull
+            IMAGE=${{ needs.build.outputs.image }} ./scripts/deploy.sh ${{ github.sha }}

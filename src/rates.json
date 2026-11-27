@@ -1,0 +1,5 @@
+{
+  "base": "USD",
+  "note": "Static demo rates: units of currency per 1 USD",
+  "rates": { "USD": 1, "EUR": 0.92, "UAH": 41.5, "PLN": 4.0, "GBP": 0.79 }
+}

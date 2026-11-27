@@ -1,0 +1,13 @@
+{
+  "name": "unit-converter",
+  "version": "1.0.0",
+  "description": "Mini DevOps project: currency and unit converter API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT",
+  "dependencies": { "express": "^4.19.2" }
+}
